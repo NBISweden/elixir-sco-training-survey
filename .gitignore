@@ -7,5 +7,6 @@
 figure/
 *.xlsx
 *.xls
+*.csv
 __pycache__/
 .ipynb_checkpoints/ 
