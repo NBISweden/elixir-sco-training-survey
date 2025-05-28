@@ -24,8 +24,3 @@ This repository contains the analysis and visualization of the ELIXIR SCO Traini
 
 The survey data is stored in an Excel file (not included in the repository due to privacy concerns).
 
-## Output
-
-The analysis generates:
-- HTML report with interactive visualizations
-- PDF and PNG figures in the `figure/` directory 
