@@ -1,0 +1,262 @@
+---
+title: "Parse Survey"
+author: "Asa Bjorklund"
+date: "`r format(Sys.time(), '%d/%m/%y')`"
+output:
+  html_document:
+    self_contained: true
+    highlight: tango
+    df_print: paged
+    code_folding: hide
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r}
+
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(xlsx))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(pheatmap))
+
+
+```
+
+
+```{r}
+data = read.xlsx("ELIXIR SCO Training survey (réponses).xlsx", sheetIndex = 1, header = F)
+colnames = as.character(data[1,])
+data = data[-1,]
+
+```
+
+
+# Responses per country
+
+```{r}
+
+data$Country = data[,4]
+data$Country = sub("ELIXIR-","", data$Country)
+data$Country = sub("FRANCE","France", data$Country)
+data$Country = sub("The ","", data$Country)
+data$Country[grep("UK", data$Country)] = "United Kingdom"
+data$Country[grep("German", data$Country)] = "Germany"
+data$Country[grep("United States", data$Country)] = "USA"
+data$Country[grep("INB Spain", data$Country)] = "Spain"
+
+t = table(data$Country)
+data = data[order(data$Country),]
+data$nCountry = paste(data$Country, unlist(sapply(t, function(x) 1:x)), sep = "-")
+
+
+barplot(table(data$Country), las = 2, main = "Responses per country")
+```
+
+Responses with no courses:
+
+```{r}
+a = which(is.na(data[,5]))
+
+b = grep("None", data[,5])
+
+print(data$Country[c(a,b)])
+```
+
+
+
+# Responses per course
+
+
+For each course, parse the info in all parts of the questions, also for "Rising need" or "I can teach"
+
+```{r}
+
+
+parse_course_url = function(x){
+  s = strsplit(x,"\n")[[1]]
+  s = gsub("Course *#[0-9] *[:-] *", "",s)
+  s = s[nchar(s)>1]
+  return(s)
+}
+course_list = sapply(data[,5], parse_course_url)
+
+
+options = c("Course #1", "Course #2", "Course #3", "Course #4", "Rising need", "I can teach")
+#parse sections 2-11, skipping 7
+section.idx = c(2:6,8:11)
+section.trans = c("Teacher","Duration","nStudents", "SCO", "SRT","EntryReq","Strategies","Compute", "Topics")
+names(section.trans)=section.idx
+
+option = sapply(colnames, str_extract, "\\[.*\\]")
+option = gsub("\\]", "", option)
+option = gsub("\\[", "", option)
+sec = sapply(colnames, str_extract ,"^\\d+")
+new.name = paste(section.trans[sec],option, sep = " : ")
+new.name[is.na(option)] = colnames[is.na(option)]
+colnames(data) = new.name
+
+parse_line = function(x){
+  urls = parse_course_url(x[,5])
+  email = x[,2]
+  s = sapply(options, grepl, x)
+  s = apply(s,2, function(y) new.name[y])
+  s = lapply(s, function(y) y[!grepl("^\\d",y)]) # remove names starting with number
+  
+  courses = s[grepl("Course", names(s))]  
+  courses = courses[sapply(courses,length)>0]
+  nC = length(courses)
+  if(nC == 0){
+    return(list(country=x[,85],name=x[,86], needs=s$`Rising need`, urls = urls, courses = NULL, email = email))
+  }
+  
+  names(courses) = paste(x[,86], names(courses), sep = ":")
+  courses = lapply(courses, function(y) c(y, paste0("Country : ",x[,85])))
+  courses = lapply(courses, function(y) c(y, paste0("Email : ",x[,2])))
+  if (length(urls) != length(courses)){
+    print("Different number of urls. ")
+    print(email)
+    print(urls)
+    print(names(courses))
+  }
+  for (i in 1:length(courses)){
+    courses[[i]] = c(courses[[i]], paste0("Url : ", urls[min(i, length(urls))]))
+  }
+  
+  
+  return(list(country=x[,85],name=x[,86], needs=s$`Rising need`, urls = urls, courses = courses))
+   
+}
+
+
+
+all.data = list()
+for (i in 1:nrow(data)){
+  all.data[[i]] = parse_line(data[i,])
+}
+```
+
+OBS! USA-1 - same course for 2019,20,21,22 - only one url.
+
+
+Comment:
+All other courses on single cell I know are on glittr.org: https://glittr.org/?search=single+cell&per_page=25&sort_by=stargazers&sort_direction=desc
+
+Multiple galaxyproject entries from Netherlands possibly pointing to the same course.
+
+
+```{r, fig.width=12, fig.height=10}
+courses = sapply(all.data, function(x) x$courses)
+courses = unlist(courses, recursive = F)
+
+all.opts = new.name[!grepl("^\\d", new.name)][-c(1:4)]
+all.opts = all.opts[-75]
+
+stats = Reduce(rbind,lapply(courses, function(x) all.opts %in% x))
+colnames(stats) = all.opts
+rownames(stats) = names(courses)
+stats = stats + 0
+stats = t(stats)
+
+annot = data.frame(country = sapply(strsplit(names(courses),"-"), function(x) x[1]))
+rownames(annot) = names(courses)
+```
+
+
+# Topics
+
+```{r, fig.width=12, fig.height=10}
+sel.topics = c(grep("SCO", rownames(stats)), grep("SRT", rownames(stats)), grep("Topics", rownames(stats)))
+
+
+
+pheatmap(stats[sel.topics,], cluster_rows = F, fontsize = 6, annotation_col = annot)
+```
+
+One of the Dutch courses is the resource page https://www.singlecell.nl/home, it has all topics included in the list. Remove from summary stats.
+
+
+Grouped by country
+
+```{r}
+course2country = lapply(courses, function(x) gsub("Country : ", "", x[grepl("Country",x)]))
+
+tmp = data.frame(t(stats))
+tmp$Country = course2country
+
+tmp = tmp[rownames(tmp) != "Netherlands-5:Course #2",]
+
+tmp2 = tmp %>% group_by(Country) %>% summarise_each(list(sum))
+
+stats.country = data.frame(tmp2)
+rownames(stats.country) = tmp2$Country
+stats.country = stats.country[,-1]
+stats.country = t((stats.country>0) + 0)
+```
+
+
+```{r}
+pheatmap(stats.country[sel.topics,], cluster_rows = F, fontsize = 6)
+```
+
+
+# Teaching methods
+
+```{r, fig.width=12, fig.height=10}
+sel.teaching = c(grep("Strategies", rownames(stats)), grep("Compute", rownames(stats)))
+
+
+
+pheatmap(stats[sel.teaching,], cluster_rows = F, fontsize = 6, annotation_col = annot)
+```
+
+Grouped by country
+
+```{r}
+pheatmap(stats.country[sel.teaching,], cluster_rows = F, fontsize = 6)
+```
+
+# Rising need
+
+Per country
+
+```{r}
+needs = lapply(all.data, function(x) x$needs)
+countries = unlist(lapply(all.data, function(x) x$country))
+
+s = split(needs, countries)
+s = lapply(s, unlist)
+
+all.cat = rownames(stats)[c(grep("SCO", rownames(stats)), grep("SRT", rownames(stats)))]
+
+need.stats = Reduce(cbind, lapply(s, function(x) all.cat %in% x)) + 0
+rownames(need.stats) = all.cat
+colnames(need.stats) = names(s)
+
+pheatmap(need.stats, cluster_rows = F)
+```
+
+
+# Print courses to a csv.
+
+```{r}
+all.courses = unlist(lapply(all.data, function(x) x$courses), recursive = F)
+
+all.courses = lapply(all.courses, function(x) Reduce(rbind, strsplit(x, " : ")))
+headers = unique(unlist(lapply(all.courses, function(x) x[,1])))
+
+
+```
+
+
+```{r}
+sessionInfo()
+```
+

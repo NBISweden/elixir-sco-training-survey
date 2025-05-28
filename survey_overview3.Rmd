@@ -1,0 +1,441 @@
+---
+title: "Parse Survey"
+author: "Asa Bjorklund"
+date: "`r format(Sys.time(), '%d/%m/%y')`"
+output:
+  html_document:
+    self_contained: true
+    highlight: tango
+    df_print: paged
+    code_folding: hide
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r}
+
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(xlsx))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(pheatmap))
+
+
+```
+
+
+```{r}
+data = read.xlsx("ELIXIR SCO Training survey (réponses).xlsx", sheetIndex = 1, header = F)
+colnames = as.character(data[1,])
+data = data[-1,]
+
+```
+
+
+# Responses per country
+
+```{r}
+
+data$Country = data[,4]
+data$Country = sub("ELIXIR-","", data$Country)
+data$Country = sub("FRANCE","France", data$Country)
+data$Country = sub("The ","", data$Country)
+data$Country[grep("UK", data$Country)] = "United Kingdom"
+data$Country[grep("German", data$Country)] = "Germany"
+data$Country[grep("United States", data$Country)] = "USA"
+data$Country[grep("INB Spain", data$Country)] = "Spain"
+
+t = table(data$Country)
+data = data[order(data$Country),]
+data$nCountry = paste(data$Country, unlist(sapply(t, function(x) 1:x)), sep = "-")
+
+par(mar=c(c(10,2,2,2)))
+barplot(table(data$Country), las = 2, main = "Responses per country")
+
+all.countries = unique(data$Country)
+```
+
+Responses with no courses:
+
+```{r}
+a = which(is.na(data[,5]))
+
+b = grep("None", data[,5])
+
+print(data$Country[c(a,b)])
+```
+
+
+
+# Parse per course
+
+
+For each course, parse the info in all parts of the questions, also for "Rising need" or "I can teach"
+
+```{r}
+
+
+parse_course_url = function(x){
+  s = strsplit(x,"\n")[[1]]
+  s = gsub("Course *#[0-9] *[:-] *", "",s)
+  s = s[nchar(s)>1]
+  return(s)
+}
+
+
+options = c("Course #1", "Course #2", "Course #3", "Course #4", "Rising need", "I can teach")
+#parse sections 2-11, skipping 7
+section.idx = c(2:6,8:11)
+section.trans = c("Teacher","Duration","nStudents", "SCO", "SRT","EntryReq","Strategies","Compute", "Topics")
+names(section.trans)=section.idx
+
+option = sapply(colnames, str_extract, "\\[.*\\]")
+option = gsub("\\]", "", option)
+option = gsub("\\[", "", option)
+sec = sapply(colnames, str_extract ,"^\\d+")
+new.name = paste(section.trans[sec],option, sep = " : ")
+new.name[is.na(option)] = colnames[is.na(option)]
+colnames(data) = new.name
+
+parse_line = function(x){
+  urls = parse_course_url(x[,5])
+  datasets = parse_course_url(x[,37])
+  email = x[,2]
+  s = sapply(options, grepl, x)
+  s = apply(s,2, function(y) new.name[y])
+  s = lapply(s, function(y) y[!grepl("^\\d",y)]) # remove names starting with number
+  
+  courses = s[grepl("Course", names(s))]  
+  courses = courses[sapply(courses,length)>0]
+  nC = length(courses)
+  if(nC == 0){
+    return(list(country=x[,85],name=x[,86], needs=s$`Rising need`, urls = urls, courses = NULL, email = email))
+  }
+  
+  names(courses) = paste(x[,86], names(courses), sep = ":")
+  courses = lapply(courses, function(y) c(y, paste0("Country : ",x[,85])))
+  courses = lapply(courses, function(y) c(y, paste0("Email : ",x[,2])))
+  if (length(urls) != length(courses)){
+    print("Different number of urls. ")
+    print(email)
+    print(urls)
+    print(names(courses))
+  }
+  if (length(datasets) != length(courses)){
+    print("Different number of datasets ")
+    print(email)
+    print(datasets)
+    print(names(courses))
+  }
+  for (i in 1:length(courses)){
+    courses[[i]] = c(courses[[i]], paste0("Url : ", urls[min(i, length(urls))]))
+    courses[[i]] = c(courses[[i]], paste0("Dataset : ", datasets[min(i, length(datasets))]))
+  }
+  
+  return(list(country=x[,85],name=x[,86], needs=s$`Rising need`, urls = urls, courses = courses))
+   
+}
+
+
+all.data = list()
+for (i in 1:nrow(data)){
+  all.data[[i]] = parse_line(data[i,])
+}
+```
+
+OBS! USA-1 - same course for 2019,20,21,22 - only one url.
+
+
+Comment:
+All other courses on single cell I know are on glittr.org: https://glittr.org/?search=single+cell&per_page=25&sort_by=stargazers&sort_direction=desc
+
+Multiple galaxyproject entries from Netherlands possibly pointing to the same course.
+
+
+```{r, fig.width=12, fig.height=10}
+courses = sapply(all.data, function(x) x$courses)
+courses = unlist(courses, recursive = F)
+
+all.opts = new.name[!grepl("^\\d", new.name)][-c(1:4)]
+all.opts = all.opts[-75]
+
+stats = Reduce(rbind,lapply(courses, function(x) all.opts %in% x))
+colnames(stats) = all.opts
+rownames(stats) = names(courses)
+stats = stats + 0
+stats = t(stats)
+
+annot = data.frame(country = sapply(strsplit(names(courses),"-"), function(x) x[1]))
+rownames(annot) = names(courses)
+```
+
+
+#### Topics
+
+```{r, fig.width=12, fig.height=10}
+sel.topics = c(grep("SCO", rownames(stats)), grep("SRT", rownames(stats)), grep("Topics", rownames(stats)))
+
+
+
+#pheatmap(stats[sel.topics,], cluster_rows = F, fontsize = 6, annotation_col = annot)
+```
+
+One of the Dutch courses is the resource page https://www.singlecell.nl/home, it has all topics included in the list. Remove from summary stats.
+
+
+Grouped by country
+
+```{r}
+course2country = lapply(courses, function(x) gsub("Country : ", "", x[grepl("Country",x)]))
+
+tmp = data.frame(t(stats))
+tmp$Country = course2country
+
+tmp = tmp[rownames(tmp) != "Netherlands-5:Course #2",]
+
+tmp2 = tmp %>% group_by(Country) %>% summarise_each(list(sum))
+
+stats.country = data.frame(tmp2)
+rownames(stats.country) = tmp2$Country
+stats.country = stats.country[,-1]
+stats.country = t((stats.country>0) + 0)
+```
+
+
+```{r}
+#pheatmap(stats.country[sel.topics,], cluster_rows = F, fontsize = 6)
+```
+
+
+#### Teaching methods
+
+```{r, fig.width=12, fig.height=10}
+sel.teaching = c(grep("Strategies", rownames(stats)), grep("Compute", rownames(stats)))
+
+
+
+#pheatmap(stats[sel.teaching,], cluster_rows = F, fontsize = 6, annotation_col = annot)
+```
+
+Grouped by country
+
+```{r}
+#pheatmap(stats.country[sel.teaching,], cluster_rows = F, fontsize = 6)
+```
+
+## Rising need
+
+Per country
+
+```{r}
+needs = lapply(all.data, function(x) x$needs)
+countries = unlist(lapply(all.data, function(x) x$country))
+
+s = split(needs, countries)
+s = lapply(s, unlist)
+
+all.cat = rownames(stats)[c(grep("SCO", rownames(stats)), grep("SRT", rownames(stats)))]
+
+need.stats = Reduce(cbind, lapply(s, function(x) all.cat %in% x)) + 0
+rownames(need.stats) = all.cat
+colnames(need.stats) = names(s)
+
+pheatmap(need.stats, cluster_rows = F)
+```
+
+
+#### Print to csv
+
+```{r}
+all.courses = unlist(lapply(all.data, function(x) x$courses), recursive = F)
+
+course.names = colnames(stats)
+
+sel.columns = c("Country","Email","Url","Dataset")
+pattern = paste(sel.columns, collapse = "|")
+
+extra = Reduce(rbind, lapply(all.courses, function(x) x[grepl(pattern,x)]))
+colnames(extra) = sel.columns
+
+
+out = data.frame(cbind(extra),t(stats))
+rownames(out) = colnames(stats)
+write.csv(out, "parsed_courses.csv")
+```
+
+# Challenges
+
+Summarized per inidivual response
+
+## Pedagogical
+
+```{r}
+tmp = data.frame(sort(table(unlist(strsplit(data[,81],", ")))))
+
+tmp = tmp[!grepl("especially",tmp$Var1),]
+
+ggplot(tmp, aes(x=Var1, y=Freq)) + geom_bar(stat="identity", width=0.5) + coord_flip() + theme_classic()
+```
+
+## Technical
+
+```{r}
+tmp = data.frame(sort(table(unlist(strsplit(data[,82],"Issues | Data")))), stringsAsFactors = F)
+# remove empty
+tmp = tmp[nchar(as.character(tmp$Var1))>0,]
+
+
+#add back the "Issues"
+starts = c("on", "in", "due", "with")
+is.issue = rowSums(sapply(starts, function(x) startsWith(as.character(tmp$Var1),x)))
+tmp$Var1 = as.character(tmp$Var1)
+tmp$Var1[is.issue>0] = paste0("Issues ",as.character(tmp$Var1[is.issue>0]))
+# max length 80
+tmp$Var1 = substr(tmp$Var1,1,80)
+tmp$Var1 = factor(tmp$Var1, levels = tmp$Var1) 
+ggplot(tmp, aes(x=Var1, y=Freq)) + geom_bar(stat="identity", width=0.5) + coord_flip() + theme_classic()
+```
+
+# Replot after annotation
+
+Remove all duplicate courses, and websites etc that are not really courses, and use the country of origin for the course.
+
+```{r}
+courses2 = read.csv("Training_survey_parsed_courses - parsed_courses.csv", header = T, row.names = 1)
+
+# remove duplicates and non-courses
+courses2 = courses2[nchar(courses2$Is.duplicate) ==0,]
+courses2 = courses2[nchar(courses2$Not.a.course) ==0,]
+
+
+```
+
+## Courses per country
+
+```{r}
+par(mar=c(10,2,2,2))
+t = table(courses2$Country.Edited)
+barplot(t, las=2, main = "Courses given per country")
+```
+
+## Topics / Technologies
+
+### By course
+
+```{r, fig.width=12, fig.height=12}
+sel.topics = c(grep("SCO", colnames(courses2)), grep("SRT", colnames(courses2)), grep("Topics", colnames(courses2)))
+
+annot = data.frame(country = courses2$Country.Edited)
+annot$country = gsub("Country : ","", annot$country)
+rownames(annot) = rownames(courses2)
+
+
+pheatmap(t(courses2[,sel.topics]), cluster_rows = F, cluster_cols = T, fontsize = 6, annotation_col = annot) 
+
+```
+
+Most/least covered topics
+
+```{r, fig.width=12, fig.height=12}
+
+tmp = data.frame(count = sort(colSums(courses2[,sel.topics])))
+tmp$topic = factor(rownames(tmp),levels = rownames(tmp))
+tmp$group = unlist(lapply(strsplit(rownames(tmp),"\\.."), function(x) x[1]))
+ggplot(tmp, aes(x=topic,y=count, fill=group)) + geom_bar(stat="identity", width=0.5) + coord_flip() 
+```
+
+
+### By country
+
+```{r, fig.width=12, fig.height=12}
+tmp = courses2[,sel.topics]
+tmp$country = courses2$Country.Edited
+tmp2 = tmp %>% group_by(country) %>% summarise_each(list(sum))
+tmp2 = data.frame(tmp2)
+rownames(tmp2) = tmp2$country
+tmp2 = tmp2[,-1]
+
+pheatmap(t(tmp2>0)+1, cluster_rows = F, fontsize = 6)
+
+```
+
+# Teaching methods
+
+```{r, fig.width=12, fig.height=12}
+sel.teaching = c(grep("Strategies", colnames(courses2)), grep("Compute", colnames(courses2)))
+
+tmp = data.frame(count = sort(colSums(courses2[,sel.teaching])))
+tmp$group = unlist(lapply(strsplit(rownames(tmp),"\\.."), function(x) x[1]))
+tmp = tmp[!grepl("Other",rownames(tmp)),]
+
+tmp$topic = gsub("Strategies...","",rownames(tmp))
+tmp$topic = gsub("Compute...","",tmp$topic)
+tmp$topic = factor(tmp$topic,levels = tmp$topic)
+
+ggplot(tmp[tmp$group == "Compute",], aes(x=topic,y=count, fill=group)) + geom_bar(stat="identity", width=0.5) + coord_flip()  + theme_classic() + ggtitle("Compute")
+ggplot(tmp[tmp$group == "Strategies",], aes(x=topic,y=count, fill=group)) + geom_bar(stat="identity", width=0.5) + coord_flip()  + theme_classic() + ggtitle("Teaching strategies")
+```
+
+```{r}
+tmp = courses2[,sel.teaching]
+tmp$country = courses2$Country.Edited
+tmp2 = tmp %>% group_by(country) %>% summarise_each(list(sum))
+tmp2 = data.frame(tmp2)
+rownames(tmp2) = tmp2$country
+tmp2 = tmp2[,-1]
+
+pheatmap(t(tmp2>0)+1, cluster_rows = F, fontsize = 6)
+```
+
+
+
+# Course duration
+
+```{r}
+sel.duration = grep("Duration", colnames(courses2))
+
+
+tmp = data.frame(count = colSums(courses2[,sel.duration]))
+rownames(tmp) = sub("Duration...","",rownames(tmp))
+tmp$topic = factor(rownames(tmp),levels = rownames(tmp))
+tmp$group = c(rep("Days",5),rep("Consecutive",2),rep("Yearly",3))
+ggplot(tmp, aes(x=topic,y=count, fill = group)) + geom_bar(stat="identity", width=0.5) + coord_flip() + theme_classic()
+```
+
+
+
+# Participants
+
+```{r}
+sel.nS = grep("nS", colnames(courses2))
+
+
+tmp = data.frame(count = colSums(courses2[,sel.nS]))
+rownames(tmp) = sub("nStudents...","",rownames(tmp))
+tmp$topic = factor(rownames(tmp),levels = rownames(tmp))
+ggplot(tmp, aes(x=topic,y=count)) + geom_bar(stat="identity", width=0.5) + coord_flip() + theme_classic()
+```
+
+
+# Entry requirements
+
+```{r}
+sel.nS = grep("EntryReq", colnames(courses2))
+
+tmp = data.frame(count = colSums(courses2[,sel.nS]))
+rownames(tmp) = sub("EntryReq...","",rownames(tmp))
+tmp$topic = factor(rownames(tmp),levels = rownames(tmp))
+ggplot(tmp, aes(x=topic,y=count)) + geom_bar(stat="identity", width=0.5) + coord_flip() + theme_classic()
+```
+
+```{r}
+sessionInfo()
+```
+
