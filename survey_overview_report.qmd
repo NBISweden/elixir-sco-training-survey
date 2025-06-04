@@ -107,6 +107,8 @@ tmp = aggregate(Freq ~ Var1, data = tmp, sum)
 tmp = tmp[order(tmp$Freq, decreasing = TRUE),]
 # remove specific line
 tmp = tmp[!grepl("Not sure yet - it will run for the first time in July", tmp$Var1),]
+# filter for counts > 1
+tmp = tmp[tmp$Freq > 1,]
 
 #add back the "Issues"
 starts = c("on", "in", "due", "with")
@@ -548,6 +550,104 @@ tmp = data.frame(count = sort(colSums(courses2[,sel.nS])))
 rownames(tmp) = sub("EntryReq...","",rownames(tmp))
 tmp$topic = factor(rownames(tmp),levels = rownames(tmp))
 ggplot(tmp, aes(x=topic,y=count)) + geom_bar(stat="identity", width=0.5, fill = "blue") + coord_flip() + theme_classic()
+  
+```
+
+### Compute resources
+
+```{r}
+library(readxl)
+library(pheatmap)
+library(stringr)
+
+courses2 <- read_excel("Training_survey_parsed_courses.xlsx", sheet = 2)
+suppressPackageStartupMessages(library(pheatmap))
+env_cols <- grep("^Compute\\.\\.\\.", colnames(courses2), value = TRUE)
+heatmap_data <- courses2[, env_cols]
+heatmap_data[!is.na(heatmap_data) & heatmap_data != 0] <- 1
+heatmap_data[is.na(heatmap_data)] <- 0
+rownames(heatmap_data) <- make.unique(as.character(courses2$`Course name`))
+colnames(heatmap_data) <- c(
+  "Local software installation",
+  "Course Server (AWS, HPC, etc.)",
+  "Free private Server (Gitpod, GoogleColab)",
+  "Galaxy/Chipster infrastructure",
+  "Docker",
+  "Conda",
+  "Rstudio",
+  "Jupyter",
+  "Other"
+)
+# Plot the heatmap
+pheatmap(
+  heatmap_data,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  fontsize_row = 8,
+  fontsize_col = 10,
+  color = c("white", "brown"),
+  legend = FALSE,
+  angle_col = 315,
+  filename = "figure/compute_resources_heatmap.pdf",
+  width = 8,  
+  height = 8
+)
+
+```
+
+### Topics/technologies
+
+```{r}
+library(readxl)
+library(pheatmap)
+library(stringr)
+
+courses2 <- read_excel("Training_survey_parsed_courses.xlsx", sheet = 2)
+suppressPackageStartupMessages(library(pheatmap))
+topic_cols <- grep("^(SCO|SRT)\\.\\.\\.", colnames(courses2), value = TRUE)
+
+# Subset the data for the heatmap
+topic_heatmap_data <- courses2[, topic_cols]
+topic_heatmap_data[!is.na(topic_heatmap_data) & topic_heatmap_data != 0] <- 1
+topic_heatmap_data[is.na(topic_heatmap_data)] <- 0
+rownames(topic_heatmap_data) <- make.unique(as.character(courses2$`Course name`))
+
+# Optionally, you can prettify the column names if you want
+colnames(topic_heatmap_data) <- gsub("^SCO\\.\\.\\.|^SRT\\.\\.\\.", "", colnames(topic_heatmap_data))
+
+colnames(topic_heatmap_data) <- c(
+ "scRNAseq",                                    
+ "scATACseq",                                        
+ "scVDJseq",                                         
+ "scCHIPseq",                                        
+ "scMETseq",                                         
+ "scDNAseq",                                         
+ "CITEseq",                                          
+ "CyTOF FACS",
+ "scPERTURBseq",                                     
+ "Multi modal Omics",
+ "Spot based SRT e.g 10X Visium",                 
+ "Image based SRT e.g 0X Xenium ISS",
+ "Targeted proteomics SRT e.g CODEX",             
+ "Untargeted proteomics metabolomics SRT e.g MSI",
+ "Image analysis SRT e.g HE staining"
+)
+
+# Plot the heatmap
+pheatmap(
+  topic_heatmap_data,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  fontsize_row = 8,
+  fontsize_col = 10,
+  color = c("white", "brown"),
+  legend = FALSE,
+  angle_col = 315,
+  filename = "figure/topics_heatmap.pdf",
+  width = 10,
+  height = 8
+)
+
 ```
 
 ## Conclusions

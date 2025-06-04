@@ -439,6 +439,9 @@ Finally the count of how many courses that cover each technology is shown in Fig
 
 ```{r techcount, fig.cap="Total count of courses covering different technologies. SCO (Single Cell Omics) and SRT (Spatially Resolved Transcriptomics)"}
 ggplot(tmp[tmp$group != "Topics",], aes(x=Topic,y=Count, fill=group)) + geom_bar(stat="identity", width=0.5) + coord_flip() + theme_classic() + theme(axis.title.y = element_blank())
+
+# Save the plot
+ggsave("figure/techcount_plot.pdf", width = 10, height = 8, dpi = 300)
 ```
 
 

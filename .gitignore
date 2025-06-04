@@ -6,6 +6,7 @@
 .DS_Store
 figure/
 *.xlsx
+!data/Training_survey_parsed_courses.xlsx
 *.xls
 *.csv
 *.tsv
