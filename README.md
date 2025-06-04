@@ -1,6 +1,50 @@
-# ELIXIR SCO Training Survey Analysis
+# ELIXIR Single-Cell Omics Training Survey Analysis
 
-This repository contains the analysis and visualization of the ELIXIR SCO Training Survey responses.
+This repository contains the analysis and visualization of the training survey conducted by the ELIXIR Single-Cell Omics Community. The survey aims to understand the current state of training in single-cell and spatial omics data analysis across different countries and institutions.
+
+## Project Overview
+
+The ELIXIR Single-Cell Omics Community focuses on building capacity in Single-Cell and Spatial Omics through various activities:
+- Organizing workshops for single-cell and spatial omics data analysis trainers
+- Conducting training gap surveys to understand current training offerings and needs
+- Providing collections of training materials
+- Organizing recorded courses
+
+## Data Structure
+
+The repository contains:
+- `data/Training_survey_parsed_courses.xlsx`: The main dataset containing parsed information about training courses
+- `results_section.Rmd`: R Markdown file containing the analysis and visualizations
+- `survey_overview_report.qmd`: Quarto document for generating the HTML report
+- `figure/`: Directory containing generated figures
+
+## Key Findings
+
+Based on the survey analysis:
+- Most courses are given once a year, for 1 week with 20-40 students
+- Main challenges include non-uniform audiences and different operating systems
+- Most courses are R-based
+- Limited coverage of single-cell omics beyond RNA-seq (e.g., ATAC, CITE, VDJ)
+- For spatial data, mainly Visium is covered in courses
+
+## Training Materials
+
+The survey has collected information about various course instances that have materials available online, including:
+- Course slides
+- Practical exercises
+- Some recorded lectures
+
+## Contributing
+
+This project is part of the ELIXIR Single-Cell Omics Community's efforts to make training scalable and FAIR, in coordination with the ELIXIR Training platform. The community ensures that training materials and expertise are shared efficiently following FAIR and open research principles.
+
+## References
+
+Czarnewski P, Mahfouz A, Calogero RA et al. Community-driven ELIXIR activities in single-cell omics [version 1; peer review: awaiting peer review]. F1000Research 2022, 11(ELIXIR):869 [https://doi.org/10.12688/f1000research.122312.1](https://doi.org/10.12688/f1000research.122312.1)
+
+## License
+
+This project is part of the ELIXIR infrastructure and follows ELIXIR's open science principles.
 
 ## Project Structure
 
