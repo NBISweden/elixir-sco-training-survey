@@ -38,10 +38,6 @@ The survey has collected information about various course instances that have ma
 
 This project is part of the ELIXIR Single-Cell Omics Community's efforts to make training scalable and FAIR, in coordination with the ELIXIR Training platform. The community ensures that training materials and expertise are shared efficiently following FAIR and open research principles.
 
-## References
-
-Czarnewski P, Mahfouz A, Calogero RA et al. Community-driven ELIXIR activities in single-cell omics [version 1; peer review: awaiting peer review]. F1000Research 2022, 11(ELIXIR):869 [https://doi.org/10.12688/f1000research.122312.1](https://doi.org/10.12688/f1000research.122312.1)
-
 ## License
 
 This project is part of the ELIXIR infrastructure and follows ELIXIR's open science principles.
@@ -51,6 +47,7 @@ This project is part of the ELIXIR infrastructure and follows ELIXIR's open scie
 - `survey_overview_report.qmd`: Main Quarto document containing the analysis and visualizations
 - `figure/`: Directory containing generated figures
 - `styles.css`: Custom styling for the HTML report
+- `data/`: Directory containing the survey data
 
 ## Setup
 
